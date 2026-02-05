@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kafka Dojo — Food Ordering</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Courier New', monospace;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      min-height: 100vh;
+    }
+    h1 {
+      text-align: center;
+      padding: 16px;
+      background: #16213e;
+      color: #0ff;
+      font-size: 1.4rem;
+      letter-spacing: 2px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 8px;
+      padding: 8px;
+      height: calc(100vh - 56px);
+    }
+    .panel {
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: 10px 14px;
+      background: #0f3460;
+      font-weight: bold;
+      font-size: 0.85rem;
+      letter-spacing: 1px;
+      color: #0ff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .panel-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+      font-size: 0.8rem;
+    }
+    /* Form */
+    .form-row { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+    .form-row input {
+      flex: 1;
+      min-width: 80px;
+      padding: 6px 8px;
+      background: #1a1a2e;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      color: #e0e0e0;
+      font-family: inherit;
+      font-size: 0.8rem;
+    }
+    button {
+      padding: 6px 14px;
+      background: #0f3460;
+      color: #0ff;
+      border: 1px solid #0ff;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.8rem;
+    }
+    button:hover { background: #1a5276; }
+    button.danger { color: #ff6b6b; border-color: #ff6b6b; }
+    button.danger:hover { background: #5a1a1a; }
+    button.warn { color: #ffa500; border-color: #ffa500; }
+    button.warn:hover { background: #5a3a00; }
+    /* Order list */
+    .order-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 8px;
+      margin-bottom: 4px;
+      background: #1a1a2e;
+      border-radius: 4px;
+      border-left: 3px solid #0ff;
+    }
+    .order-item.deleted { border-left-color: #ff6b6b; opacity: 0.5; }
+    .order-item .info { flex: 1; }
+    .order-item .actions { display: flex; gap: 4px; }
+    /* Log entries */
+    .log-entry {
+      padding: 4px 8px;
+      margin-bottom: 3px;
+      border-radius: 3px;
+      background: #1a1a2e;
+      border-left: 3px solid #555;
+      word-break: break-all;
+    }
+    .log-entry.success { border-left-color: #00e676; }
+    .log-entry.fail { border-left-color: #ff6b6b; }
+    .log-entry.dlq { border-left-color: #ffa500; }
+    .log-entry.retry { border-left-color: #ffeb3b; }
+    .log-entry.stats { border-left-color: #7c4dff; }
+    .log-entry.order-service { border-left-color: #0ff; }
+    .log-entry.notification-service { border-left-color: #00e676; }
+    .log-entry.analytics { border-left-color: #7c4dff; }
+    /* Stats */
+    .stat-card {
+      display: inline-block;
+      padding: 10px 16px;
+      margin: 4px;
+      background: #1a1a2e;
+      border-radius: 6px;
+      text-align: center;
+      border: 1px solid #0f3460;
+    }
+    .stat-card .value {
+      font-size: 1.6rem;
+      color: #0ff;
+      font-weight: bold;
+    }
+    .stat-card .label { font-size: 0.7rem; color: #888; margin-top: 2px; }
+    .breakdown { margin-top: 10px; }
+    .breakdown span {
+      display: inline-block;
+      padding: 3px 8px;
+      margin: 2px;
+      background: #1a1a2e;
+      border-radius: 3px;
+      font-size: 0.75rem;
+    }
+    .connection-status {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      margin-left: 8px;
+    }
+    .connection-status.connected { background: #00e676; }
+    .connection-status.disconnected { background: #ff6b6b; }
+  </style>
+</head>
+<body>
+  <h1>KAFKA DOJO — Food Ordering <span id="connStatus" class="connection-status disconnected"></span></h1>
+  <div class="grid">
+    <!-- Orders Panel -->
+    <div class="panel">
+      <div class="panel-header">
+        ORDERS
+        <button class="warn" onclick="spamOrders()">Spam 10 Orders</button>
+      </div>
+      <div class="panel-body">
+        <div class="form-row">
+          <input id="fName" placeholder="Customer name" value="Alice">
+          <input id="fItem" placeholder="Item" value="Pizza">
+          <input id="fQty" type="number" placeholder="Qty" value="1" min="1" style="max-width:60px">
+          <input id="fPrice" type="number" placeholder="Price" value="12.99" step="0.01" style="max-width:80px">
+          <button onclick="createOrder()">Create</button>
+        </div>
+        <div id="orderList"></div>
+      </div>
+    </div>
+    <!-- Notifications Panel -->
+    <div class="panel">
+      <div class="panel-header">NOTIFICATIONS <span id="notifCount">0</span></div>
+      <div class="panel-body" id="notifLog"></div>
+    </div>
+    <!-- Analytics Panel -->
+    <div class="panel">
+      <div class="panel-header">ANALYTICS</div>
+      <div class="panel-body" id="analyticsPanel">
+        <div>
+          <div class="stat-card"><div class="value" id="statOrders">0</div><div class="label">TOTAL ORDERS</div></div>
+          <div class="stat-card"><div class="value" id="statRevenue">$0.00</div><div class="label">REVENUE</div></div>
+        </div>
+        <div class="breakdown" id="statBreakdown"></div>
+      </div>
+    </div>
+    <!-- Audit Log Panel -->
+    <div class="panel">
+      <div class="panel-header">AUDIT LOG <span id="auditCount">0</span></div>
+      <div class="panel-body" id="auditLog"></div>
+    </div>
+  </div>
+
+  <script>
+    const orderMap = {};
+    let notifCounter = 0;
+    let auditCounter = 0;
+
+    // SSE
+    const es = new EventSource('/events');
+    es.onopen = () => document.getElementById('connStatus').className = 'connection-status connected';
+    es.onerror = () => document.getElementById('connStatus').className = 'connection-status disconnected';
+    es.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      switch (msg.type) {
+        case 'order': handleOrder(msg.data); break;
+        case 'audit': handleAudit(msg.data); break;
+        case 'dlq': handleDlq(msg.data); break;
+      }
+    };
+
+    function handleOrder(data) {
+      const { action, order } = data;
+      if (action === 'deleted') {
+        delete orderMap[order.id];
+      } else {
+        orderMap[order.id] = order;
+      }
+      renderOrders();
+    }
+
+    function handleAudit(data) {
+      auditCounter++;
+      document.getElementById('auditCount').textContent = auditCounter;
+      const el = document.createElement('div');
+      el.className = 'log-entry ' + (data.source || '');
+      const time = new Date(data.timestamp).toLocaleTimeString();
+      el.textContent = `[${time}] ${data.source} → ${data.action}` +
+        (data.orderId ? ` (${data.orderId.slice(0, 8)}…)` : '') +
+        (data.instanceId ? ` [${data.instanceId}]` : '');
+      const log = document.getElementById('auditLog');
+      log.prepend(el);
+
+      // Route to notifications panel
+      if (data.source === 'notification-service') {
+        notifCounter++;
+        document.getElementById('notifCount').textContent = notifCounter;
+        const nel = document.createElement('div');
+        const cls = data.action === 'NOTIFIED' ? 'success' :
+                    data.action === 'RETRY' ? 'retry' :
+                    data.action === 'DLQ' ? 'dlq' : '';
+        nel.className = 'log-entry ' + cls;
+        nel.textContent = `[${time}] ${data.action}` +
+          (data.orderId ? ` order:${data.orderId.slice(0, 8)}…` : '') +
+          (data.instanceId ? ` [${data.instanceId}]` : '') +
+          (data.retryCount !== undefined ? ` retry:${data.retryCount}` : '');
+        document.getElementById('notifLog').prepend(nel);
+      }
+
+      // Route to analytics panel
+      if (data.source === 'analytics' && data.stats) {
+        document.getElementById('statOrders').textContent = data.stats.totalOrders;
+        document.getElementById('statRevenue').textContent = '$' + data.stats.totalRevenue.toFixed(2);
+        const bd = document.getElementById('statBreakdown');
+        bd.innerHTML = '<strong>By action:</strong> ' +
+          Object.entries(data.stats.byAction).map(([k, v]) => `<span>${k}: ${v}</span>`).join('');
+      }
+    }
+
+    function handleDlq(data) {
+      notifCounter++;
+      document.getElementById('notifCount').textContent = notifCounter;
+      const nel = document.createElement('div');
+      nel.className = 'log-entry dlq';
+      const time = new Date(data.timestamp || Date.now()).toLocaleTimeString();
+      nel.textContent = `[${time}] DLQ — order:${(data.order?.id || data.orderId || '').slice(0, 8)}… — ${data.reason || 'Max retries exceeded'}`;
+      document.getElementById('notifLog').prepend(nel);
+    }
+
+    function renderOrders() {
+      const list = document.getElementById('orderList');
+      const entries = Object.values(orderMap);
+      list.innerHTML = entries.map(o => `
+        <div class="order-item">
+          <div class="info">
+            <strong>${o.customerName}</strong> — ${o.item} x${o.quantity} — $${o.price}
+            <span style="color:#888;font-size:0.7rem"> [${o.id.slice(0,8)}…]</span>
+          </div>
+          <div class="actions">
+            <button onclick="updateOrder('${o.id}')">Update</button>
+            <button class="danger" onclick="deleteOrder('${o.id}')">Delete</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function createOrder() {
+      const body = {
+        customerName: document.getElementById('fName').value,
+        item: document.getElementById('fItem').value,
+        quantity: parseInt(document.getElementById('fQty').value) || 1,
+        price: parseFloat(document.getElementById('fPrice').value) || 0,
+      };
+      await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    }
+
+    async function updateOrder(id) {
+      const newItem = prompt('New item name:');
+      if (!newItem) return;
+      await fetch(`/api/orders/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item: newItem, status: 'updated' }),
+      });
+    }
+
+    async function deleteOrder(id) {
+      await fetch(`/api/orders/${id}`, { method: 'DELETE' });
+    }
+
+    const ITEMS = ['Pizza', 'Burger', 'Sushi', 'Tacos', 'Pasta', 'Salad', 'Ramen', 'Steak', 'Curry', 'Pad Thai'];
+    const NAMES = ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve', 'Frank', 'Grace', 'Hank', 'Ivy', 'Jack'];
+    function spamOrders() {
+      for (let i = 0; i < 10; i++) {
+        fetch('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            customerName: NAMES[Math.floor(Math.random() * NAMES.length)],
+            item: ITEMS[Math.floor(Math.random() * ITEMS.length)],
+            quantity: Math.floor(Math.random() * 5) + 1,
+            price: parseFloat((Math.random() * 20 + 5).toFixed(2)),
+          }),
+        });
+      }
+    }
+
+    // Load existing orders on page load
+    fetch('/api/orders').then(r => r.json()).then(orders => {
+      orders.forEach(o => { orderMap[o.id] = o; });
+      renderOrders();
+    });
+  </script>
+</body>
+</html>
