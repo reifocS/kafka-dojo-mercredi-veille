@@ -177,8 +177,9 @@
       <div class="panel-header">ANALYTICS</div>
       <div class="panel-body" id="analyticsPanel">
         <div>
-          <div class="stat-card"><div class="value" id="statOrders">0</div><div class="label">TOTAL ORDERS</div></div>
-          <div class="stat-card"><div class="value" id="statRevenue">$0.00</div><div class="label">REVENUE</div></div>
+          <div class="stat-card"><div class="value" id="statOrdersPerMin">0</div><div class="label">ORDERS / MIN</div></div>
+          <div class="stat-card"><div class="value" id="statSuccessRate">N/A</div><div class="label">SUCCESS RATE</div></div>
+          <div class="stat-card"><div class="value" id="statLatency">-</div><div class="label">AVG LATENCY</div></div>
         </div>
         <div class="breakdown" id="statBreakdown"></div>
       </div>
@@ -248,11 +249,13 @@
 
       // Route to analytics panel
       if (data.source === 'analytics' && data.stats) {
-        document.getElementById('statOrders').textContent = data.stats.totalOrders;
-        document.getElementById('statRevenue').textContent = '$' + data.stats.totalRevenue.toFixed(2);
+        document.getElementById('statOrdersPerMin').textContent = data.stats.ordersPerMinute;
+        document.getElementById('statSuccessRate').textContent = data.stats.notificationSuccessRate;
+        document.getElementById('statLatency').textContent = data.stats.avgNotificationLatencyMs ? data.stats.avgNotificationLatencyMs + 'ms' : '-';
         const bd = document.getElementById('statBreakdown');
-        bd.innerHTML = '<strong>By action:</strong> ' +
-          Object.entries(data.stats.byAction).map(([k, v]) => `<span>${k}: ${v}</span>`).join('');
+        const outcomes = data.stats.notificationOutcomes || {};
+        bd.innerHTML = '<strong>Notifications:</strong> ' +
+          Object.entries(outcomes).map(([k, v]) => `<span>${k}: ${v}</span>`).join('');
       }
     }
 

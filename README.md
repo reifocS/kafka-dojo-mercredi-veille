@@ -124,12 +124,13 @@ Produced by every service. Shape varies by source:
 ```json
 {
   "source": "analytics",
-  "action": "STATS_UPDATED",
+  "action": "STREAM_STATS",
   "orderId": "uuid",
   "stats": {
-    "totalOrders": 5,
-    "totalRevenue": 64.95,
-    "byAction": { "created": 5 }
+    "ordersPerMinute": 12,
+    "notificationSuccessRate": "85.7%",
+    "notificationOutcomes": { "NOTIFIED": 6, "RETRY": 3, "DLQ": 1 },
+    "avgNotificationLatencyMs": 45
   },
   "timestamp": "..."
 }
