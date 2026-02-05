@@ -37,7 +37,7 @@ async function start() {
 
       // Simulate failure
       if (Math.random() < FAIL_RATE) {
-        if (retryCount >= 3) {
+        if (retryCount >= 2) {
           console.log(`[${INSTANCE_ID}] -> DLQ (max retries) order=${order.id.slice(0, 8)}…`);
           await producer.send({
             topic: 'orders-dlq',
