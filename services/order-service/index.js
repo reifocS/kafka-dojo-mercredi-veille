@@ -60,6 +60,24 @@ async function produceAudit(action, order) {
   });
 }
 
+// Publish to compacted topic — only latest status per order is retained
+async function produceOrderStatus(order) {
+  await producer.send({
+    topic: 'order-status',
+    messages: [{
+      key: order.id,
+      // For deletes, send null value (tombstone) to remove from compacted log
+      value: order.status === 'deleted' ? null : JSON.stringify({
+        id: order.id,
+        customerName: order.customerName,
+        item: order.item,
+        status: order.status,
+        updatedAt: new Date().toISOString(),
+      }),
+    }],
+  });
+}
+
 // REST routes
 app.post('/api/orders', async (req, res) => {
   const { customerName, item, quantity, price } = req.body;
@@ -75,6 +93,7 @@ app.post('/api/orders', async (req, res) => {
   orders.set(order.id, order);
   await produceEvent('orders', 'created', order);
   await produceAudit('created', order);
+  await produceOrderStatus(order);
   broadcast('order', { action: 'created', order });
   res.status(201).json(order);
 });
@@ -90,6 +109,7 @@ app.put('/api/orders/:id', async (req, res) => {
   orders.set(order.id, order);
   await produceEvent('orders', 'updated', order);
   await produceAudit('updated', order);
+  await produceOrderStatus(order);
   broadcast('order', { action: 'updated', order });
   res.json(order);
 });
@@ -101,6 +121,7 @@ app.delete('/api/orders/:id', async (req, res) => {
   order.status = 'deleted';
   await produceEvent('orders', 'deleted', order);
   await produceAudit('deleted', order);
+  await produceOrderStatus(order);  // sends tombstone (null) to remove from compacted log
   broadcast('order', { action: 'deleted', order });
   res.json(order);
 });

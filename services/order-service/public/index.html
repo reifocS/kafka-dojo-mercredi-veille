@@ -172,16 +172,16 @@
       <div class="panel-header">NOTIFICATIONS <span id="notifCount">0</span></div>
       <div class="panel-body" id="notifLog"></div>
     </div>
-    <!-- Analytics Panel -->
+    <!-- Fraud Detection Panel -->
     <div class="panel">
-      <div class="panel-header">ANALYTICS</div>
-      <div class="panel-body" id="analyticsPanel">
+      <div class="panel-header">FRAUD DETECTION <span id="fraudCount">0</span></div>
+      <div class="panel-body" id="fraudPanel">
         <div>
-          <div class="stat-card"><div class="value" id="statOrdersPerMin">0</div><div class="label">ORDERS / MIN</div></div>
-          <div class="stat-card"><div class="value" id="statSuccessRate">N/A</div><div class="label">SUCCESS RATE</div></div>
-          <div class="stat-card"><div class="value" id="statLatency">-</div><div class="label">AVG LATENCY</div></div>
+          <div class="stat-card"><div class="value" id="statAlerts" style="color:#ff6b6b">0</div><div class="label">ALERTS</div></div>
+          <div class="stat-card"><div class="value" id="statPassed" style="color:#00e676">0</div><div class="label">PASSED</div></div>
+          <div class="stat-card"><div class="value" id="statGlobalWindow">0</div><div class="label">ORDERS/MIN</div></div>
         </div>
-        <div class="breakdown" id="statBreakdown"></div>
+        <div id="fraudLog" style="margin-top:10px;"></div>
       </div>
     </div>
     <!-- Audit Log Panel -->
@@ -247,15 +247,33 @@
         document.getElementById('notifLog').prepend(nel);
       }
 
-      // Route to analytics panel
-      if (data.source === 'analytics' && data.stats) {
-        document.getElementById('statOrdersPerMin').textContent = data.stats.ordersPerMinute;
-        document.getElementById('statSuccessRate').textContent = data.stats.notificationSuccessRate;
-        document.getElementById('statLatency').textContent = data.stats.avgNotificationLatencyMs ? data.stats.avgNotificationLatencyMs + 'ms' : '-';
-        const bd = document.getElementById('statBreakdown');
-        const outcomes = data.stats.notificationOutcomes || {};
-        bd.innerHTML = '<strong>Notifications:</strong> ' +
-          Object.entries(outcomes).map(([k, v]) => `<span>${k}: ${v}</span>`).join('');
+      // Route to fraud detection panel
+      if (data.source === 'fraud-service') {
+        const isAlert = data.action === 'FRAUD_ALERT';
+        const alertCount = parseInt(document.getElementById('statAlerts').textContent) || 0;
+        const passedCount = parseInt(document.getElementById('statPassed').textContent) || 0;
+
+        if (isAlert) {
+          document.getElementById('statAlerts').textContent = alertCount + 1;
+        } else {
+          document.getElementById('statPassed').textContent = passedCount + 1;
+        }
+
+        if (data.windowStats) {
+          document.getElementById('statGlobalWindow').textContent = data.windowStats.globalOrdersInWindow;
+        }
+
+        // Log fraud events
+        const fel = document.createElement('div');
+        fel.className = 'log-entry ' + (isAlert ? 'fail' : 'success');
+        const alertTypes = data.alerts ? data.alerts.map(a => `${a.type}(${a.severity})`).join(', ') : '';
+        fel.textContent = `[${time}] ${isAlert ? 'ALERT' : 'OK'} ${data.customerName || ''} order:${(data.orderId || '').slice(0, 8)}…` +
+          (isAlert ? ` — ${alertTypes}` : '');
+        document.getElementById('fraudLog').prepend(fel);
+
+        // Keep fraud log manageable
+        const fraudLog = document.getElementById('fraudLog');
+        while (fraudLog.children.length > 50) fraudLog.removeChild(fraudLog.lastChild);
       }
     }
 
