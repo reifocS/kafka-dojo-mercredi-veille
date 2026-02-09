@@ -1,7 +1,24 @@
 const { kafka } = require('../shared/kafka');
 
+const express = require('express');
 const INSTANCE_ID = process.env.INSTANCE_ID || 'notification-0';
-const FAIL_RATE = parseFloat(process.env.FAIL_RATE || '0.3');
+let FAIL_RATE = parseFloat(process.env.FAIL_RATE || '0.3');
+let failMode = process.env.FAIL_MODE || 'dlq'; // dlq | drop | retry-forever
+
+const app = express();
+app.get('/fail-rate', (_req, res) => res.json({ failRate: FAIL_RATE }));
+app.put('/fail-rate/:rate', (req, res) => {
+  FAIL_RATE = parseFloat(req.params.rate);
+  console.log(`[${INSTANCE_ID}] Fail rate changed to ${FAIL_RATE}`);
+  res.json({ failRate: FAIL_RATE });
+});
+app.get('/fail-mode', (_req, res) => res.json({ mode: failMode }));
+app.put('/fail-mode/:mode', (req, res) => {
+  failMode = req.params.mode;
+  console.log(`[${INSTANCE_ID}] Fail mode changed to ${failMode}`);
+  res.json({ mode: failMode });
+});
+app.listen(process.env.NOTIF_PORT || 4000);
 
 const producer = kafka.producer();
 const consumer = kafka.consumer({ kafkaJS: { groupId: 'notification-group' } });
@@ -37,7 +54,18 @@ async function start() {
 
       // Simulate failure
       if (Math.random() < FAIL_RATE) {
-        if (retryCount >= 2) {
+        if (failMode === 'retry-forever' || retryCount < 2) {
+          console.log(`[${INSTANCE_ID}] -> RETRY (${retryCount + 1}) order=${order.id.slice(0, 8)}…`);
+          await producer.send({
+            topic: 'orders',
+            messages: [{
+              key: order.id,
+              value: message.value.toString(),
+              headers: { retryCount: String(retryCount + 1) },
+            }],
+          });
+          await produceAudit('RETRY', order, { retryCount: retryCount + 1 });
+        } else if (failMode === 'dlq') {
           console.log(`[${INSTANCE_ID}] -> DLQ (max retries) order=${order.id.slice(0, 8)}…`);
           await producer.send({
             topic: 'orders-dlq',
@@ -52,16 +80,8 @@ async function start() {
           });
           await produceAudit('DLQ', order, { retryCount });
         } else {
-          console.log(`[${INSTANCE_ID}] -> RETRY (${retryCount + 1}) order=${order.id.slice(0, 8)}…`);
-          await producer.send({
-            topic: 'orders',
-            messages: [{
-              key: order.id,
-              value: message.value.toString(),
-              headers: { retryCount: String(retryCount + 1) },
-            }],
-          });
-          await produceAudit('RETRY', order, { retryCount: retryCount + 1 });
+          console.log(`[${INSTANCE_ID}] -> DROPPED (no DLQ) order=${order.id.slice(0, 8)}…`);
+          await produceAudit('DROPPED', order, { retryCount });
         }
       } else {
         console.log(`[${INSTANCE_ID}] -> NOTIFIED order=${order.id.slice(0, 8)}…`);

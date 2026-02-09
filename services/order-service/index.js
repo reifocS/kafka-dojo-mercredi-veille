@@ -10,7 +10,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 const PORT = process.env.PORT || 3000;
 const orders = new Map();
 const sseClients = new Set();
-
 // SSE helpers
 function broadcast(type, data) {
   const message = JSON.stringify({ type, data, timestamp: new Date().toISOString() });

@@ -108,10 +108,9 @@
     .log-entry.fail { border-left-color: #ff6b6b; }
     .log-entry.dlq { border-left-color: #ffa500; }
     .log-entry.retry { border-left-color: #ffeb3b; }
-    .log-entry.stats { border-left-color: #7c4dff; }
     .log-entry.order-service { border-left-color: #0ff; }
     .log-entry.notification-service { border-left-color: #00e676; }
-    .log-entry.analytics { border-left-color: #7c4dff; }
+    .log-entry.fraud-service { border-left-color: #7c4dff; }
     /* Stats */
     .stat-card {
       display: inline-block;
@@ -128,15 +127,6 @@
       font-weight: bold;
     }
     .stat-card .label { font-size: 0.7rem; color: #888; margin-top: 2px; }
-    .breakdown { margin-top: 10px; }
-    .breakdown span {
-      display: inline-block;
-      padding: 3px 8px;
-      margin: 2px;
-      background: #1a1a2e;
-      border-radius: 3px;
-      font-size: 0.75rem;
-    }
     .connection-status {
       display: inline-block;
       width: 8px; height: 8px;
@@ -228,8 +218,7 @@
       el.textContent = `[${time}] ${data.source} → ${data.action}` +
         (data.orderId ? ` (${data.orderId.slice(0, 8)}…)` : '') +
         (data.instanceId ? ` [${data.instanceId}]` : '');
-      const log = document.getElementById('auditLog');
-      log.prepend(el);
+      document.getElementById('auditLog').prepend(el);
 
       // Route to notifications panel
       if (data.source === 'notification-service') {

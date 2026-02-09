@@ -1,7 +1,7 @@
 const { kafka } = require('../shared/kafka');
 
 const producer = kafka.producer();
-const consumer = kafka.consumer({ kafkaJS: { groupId: 'analytics-group' } });
+const consumer = kafka.consumer({ kafkaJS: { groupId: 'analytics-group', fromBeginning: true } });
 
 // Time-windowed metrics (can't derive from DB!)
 const WINDOW_MS = 60_000; // 1 minute window
@@ -44,6 +44,8 @@ async function start() {
   await consumer.connect();
   // Subscribe to both topics - we need the event flow, not just current state
   await consumer.subscribe({ topics: ['orders', 'audit'] });
+
+  console.log('[Analytics] Rebuilding state from event history...');
 
   await consumer.run({
     eachMessage: async ({ topic, message }) => {

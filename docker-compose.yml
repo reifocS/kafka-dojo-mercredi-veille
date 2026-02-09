@@ -78,7 +78,7 @@ services:
       KAFKA_BROKER: kafka:9092
       SERVICE_NAME: notification-service
       INSTANCE_ID: notification-1
-      FAIL_RATE: "0.3"
+      FAIL_RATE: "0.00"
     command: node --watch notification-service/index.js
     volumes:
       - ./services:/app
@@ -87,33 +87,33 @@ services:
       kafka-init:
         condition: service_completed_successfully
 
-  notification-2:
-    build:
-      context: ./services
-      dockerfile: Dockerfile
-    container_name: notification-2
-    environment:
-      KAFKA_BROKER: kafka:9092
-      SERVICE_NAME: notification-service
-      INSTANCE_ID: notification-2
-      FAIL_RATE: "0.3"
-    command: node --watch notification-service/index.js
-    volumes:
-      - ./services:/app
-      - /app/node_modules
-    depends_on:
-      kafka-init:
-        condition: service_completed_successfully
+  # notification-2:
+  #   build:
+  #     context: ./services
+  #     dockerfile: Dockerfile
+  #   container_name: notification-2
+  #   environment:
+  #     KAFKA_BROKER: kafka:9092
+  #     SERVICE_NAME: notification-service
+  #     INSTANCE_ID: notification-2
+  #     FAIL_RATE: "0.9"
+  #   command: node --watch notification-service/index.js
+  #   volumes:
+  #     - ./services:/app
+  #     - /app/node_modules
+  #   depends_on:
+  #     kafka-init:
+  #       condition: service_completed_successfully
 
-  analytics-service:
+  fraud-service:
     build:
       context: ./services
       dockerfile: Dockerfile
-    container_name: analytics-service
+    container_name: fraud-service
     environment:
       KAFKA_BROKER: kafka:9092
-      SERVICE_NAME: analytics-service
-    command: node --watch analytics-service/index.js
+      SERVICE_NAME: fraud-service
+    command: node --watch fraud-service/index.js
     volumes:
       - ./services:/app
       - /app/node_modules

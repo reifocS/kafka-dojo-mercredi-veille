@@ -24,6 +24,44 @@ graph TD
     audit --> Audit[Audit Service]
 ```
 
+## At a Glance
+
+### Services
+
+| Service | Container | Host Port | Role |
+| --- | --- | --- | --- |
+| Order Service | `order-service` | `3001` | REST API + SSE; produces `orders` + `audit`; relays `audit` + `orders-dlq` to SSE |
+| Notification Service (x2) | `notification-1`, `notification-2` | — | Consumes `orders`; retries or DLQ; produces `audit` |
+| Analytics Service | `analytics-service` | — | Consumes `orders` (skips retried); updates stats; produces `audit` |
+| Audit Service | `audit-service` | — | Consumes `audit`; logs events |
+| Kafka UI | `kafka-ui` | `8080` | Inspect topics and messages |
+| Kafka Broker | `kafka` | `29092` (external) | Kafka broker for all services |
+
+### Topics
+
+| Topic | Partitions | Producers | Consumers | Notes |
+| --- | --- | --- | --- | --- |
+| `orders` | 3 | Order Service, Notification Service (retry) | Notification Service, Analytics Service | Retries re-produce to `orders` with `retryCount` header |
+| `orders-dlq` | 1 | Notification Service | Order Service (SSE relay) | Emitted after max retries |
+| `audit` | 1 | Order, Notification, Analytics Services | Audit Service, Order Service (SSE relay) | Unified audit stream |
+
+## Event Flow (Happy Path + Failure)
+
+1. Browser sends REST request to Order Service. The order is stored in memory and an `orders` event is produced. An `audit` event is also produced, and an SSE `order` event is broadcast.
+1. Notification Service instances consume from `orders` in the same consumer group. On success they emit `audit: NOTIFIED`.
+1. If notification fails, the message is re-produced to `orders` with a `retryCount` header and `audit: RETRY`. If `retryCount` is already `2`, the message is sent to `orders-dlq` with `audit: DLQ`.
+1. Analytics Service consumes `orders` and ignores messages that include `retryCount` to avoid double-counting. It updates in-memory stats and emits `audit: STATS_UPDATED`.
+1. Audit Service consumes `audit` and logs the event.
+1. Order Service also consumes `audit` and `orders-dlq` to relay them over SSE as `audit` and `dlq` event types.
+
+## SSE Stream
+
+The Order Service exposes an SSE endpoint at `/events`. Each SSE message has the envelope:
+
+```json
+{ "type": "order | audit | dlq", "data": { }, "timestamp": "..." }
+```
+
 ## With Kafka — Asynchronous Events
 
 ```mermaid
@@ -148,7 +186,7 @@ Produced by Order Service on every create, update, or delete.
 }
 ```
 
-**Headers:** `retryCount` (added by Notification Service on retry, starts at `"1"`)
+**Headers:** `retryCount` (added by Notification Service on retry; original messages have none)
 
 ### `audit` topic
 
@@ -199,7 +237,7 @@ Produced by every service. Shape varies by source:
 
 ### `orders-dlq` topic
 
-Produced by Notification Service after 3 failed retries.
+Produced by Notification Service after 2 failed retries.
 
 ```json
 {
