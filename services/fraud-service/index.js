@@ -93,7 +93,7 @@ async function start() {
         console.log(`[Fraud] ALERT on order ${order.id.slice(0, 8)}… — ${alerts.map(a => a.type).join(', ')}`);
 
         await producer.send({
-          topic: 'audit',
+          topic: 'fraud-checks',
           messages: [{
             key: order.id,
             value: JSON.stringify({
@@ -114,7 +114,7 @@ async function start() {
         console.log(`[Fraud] OK order ${order.id.slice(0, 8)}… — customer=${order.customerName} window=${customerOrders.get(order.customerName)?.length || 1}`);
 
         await producer.send({
-          topic: 'audit',
+          topic: 'fraud-checks',
           messages: [{
             key: order.id,
             value: JSON.stringify({

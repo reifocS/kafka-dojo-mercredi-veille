@@ -43,40 +43,6 @@ async function produceEvent(topic, action, order, headers = {}) {
   });
 }
 
-async function produceAudit(action, order) {
-  await producer.send({
-    topic: 'audit',
-    messages: [{
-      key: order.id,
-      value: JSON.stringify({
-        source: 'order-service',
-        action,
-        orderId: order.id,
-        order,
-        timestamp: new Date().toISOString(),
-      }),
-    }],
-  });
-}
-
-// Publish to compacted topic — only latest status per order is retained
-async function produceOrderStatus(order) {
-  await producer.send({
-    topic: 'order-status',
-    messages: [{
-      key: order.id,
-      // For deletes, send null value (tombstone) to remove from compacted log
-      value: order.status === 'deleted' ? null : JSON.stringify({
-        id: order.id,
-        customerName: order.customerName,
-        item: order.item,
-        status: order.status,
-        updatedAt: new Date().toISOString(),
-      }),
-    }],
-  });
-}
-
 // REST routes
 app.post('/api/orders', async (req, res) => {
   const { customerName, item, quantity, price } = req.body;
@@ -91,9 +57,8 @@ app.post('/api/orders', async (req, res) => {
   };
   orders.set(order.id, order);
   await produceEvent('orders', 'created', order);
-  await produceAudit('created', order);
-  await produceOrderStatus(order);
   broadcast('order', { action: 'created', order });
+  broadcast('audit', { source: 'order-service', action: 'created', orderId: order.id, timestamp: new Date().toISOString() });
   res.status(201).json(order);
 });
 
@@ -107,9 +72,8 @@ app.put('/api/orders/:id', async (req, res) => {
   Object.assign(order, req.body);
   orders.set(order.id, order);
   await produceEvent('orders', 'updated', order);
-  await produceAudit('updated', order);
-  await produceOrderStatus(order);
   broadcast('order', { action: 'updated', order });
+  broadcast('audit', { source: 'order-service', action: 'updated', orderId: order.id, timestamp: new Date().toISOString() });
   res.json(order);
 });
 
@@ -119,21 +83,20 @@ app.delete('/api/orders/:id', async (req, res) => {
   orders.delete(order.id);
   order.status = 'deleted';
   await produceEvent('orders', 'deleted', order);
-  await produceAudit('deleted', order);
-  await produceOrderStatus(order);  // sends tombstone (null) to remove from compacted log
   broadcast('order', { action: 'deleted', order });
+  broadcast('audit', { source: 'order-service', action: 'deleted', orderId: order.id, timestamp: new Date().toISOString() });
   res.json(order);
 });
 
-// Internal consumer — relay audit + DLQ events to SSE
+// Internal consumer — relay notification/fraud/DLQ events to SSE
 async function startRelayConsumer() {
   const consumer = kafka.consumer({ kafkaJS: { groupId: 'sse-relay-group' } });
   await consumer.connect();
-  await consumer.subscribe({ topics: ['audit', 'orders-dlq'] });
+  await consumer.subscribe({ topics: ['notifications', 'fraud-checks', 'orders-dlq'] });
   await consumer.run({
     eachMessage: async ({ topic, message }) => {
       const data = JSON.parse(message.value.toString());
-      if (topic === 'audit') {
+      if (topic === 'notifications' || topic === 'fraud-checks') {
         broadcast('audit', data);
       } else if (topic === 'orders-dlq') {
         broadcast('dlq', data);

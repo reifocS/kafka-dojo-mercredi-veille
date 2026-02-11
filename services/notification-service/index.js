@@ -23,9 +23,9 @@ app.listen(process.env.NOTIF_PORT || 4000);
 const producer = kafka.producer();
 const consumer = kafka.consumer({ kafkaJS: { groupId: 'notification-group' } });
 
-async function produceAudit(action, order, extra = {}) {
+async function produceOutcome(action, order, extra = {}) {
   await producer.send({
-    topic: 'audit',
+    topic: 'notifications',
     messages: [{
       key: order.id,
       value: JSON.stringify({
@@ -64,7 +64,7 @@ async function start() {
               headers: { retryCount: String(retryCount + 1) },
             }],
           });
-          await produceAudit('RETRY', order, { retryCount: retryCount + 1 });
+          await produceOutcome('RETRY', order, { retryCount: retryCount + 1 });
         } else if (failMode === 'dlq') {
           console.log(`[${INSTANCE_ID}] -> DLQ (max retries) order=${order.id.slice(0, 8)}…`);
           await producer.send({
@@ -78,14 +78,14 @@ async function start() {
               }),
             }],
           });
-          await produceAudit('DLQ', order, { retryCount });
+          await produceOutcome('DLQ', order, { retryCount });
         } else {
           console.log(`[${INSTANCE_ID}] -> DROPPED (no DLQ) order=${order.id.slice(0, 8)}…`);
-          await produceAudit('DROPPED', order, { retryCount });
+          await produceOutcome('DROPPED', order, { retryCount });
         }
       } else {
         console.log(`[${INSTANCE_ID}] -> NOTIFIED order=${order.id.slice(0, 8)}…`);
-        await produceAudit('NOTIFIED', order);
+        await produceOutcome('NOTIFIED', order);
       }
     },
   });
